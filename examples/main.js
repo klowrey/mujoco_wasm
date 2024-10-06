@@ -25,7 +25,7 @@ export class MuJoCoDemo {
     this.simulation = new mujoco.Simulation(this.model, this.state);
 
     // Define Random State Variables
-    this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
+    this.params = { scene: initialScene, paused: false, help: false, mppi: false, mppi_k:32, mppi_h: 32, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
     this.mujoco_time = 0.0;
     this.bodies  = {}, this.lights = {};
     this.tmpVec  = new THREE.Vector3();
@@ -131,6 +131,41 @@ export class MuJoCoDemo {
           // TODO: Apply pose perturbations (mocap bodies only).
         }
 
+        if (this.params["mppi"]) {
+          // save qpos qvel state
+          // run mppi for some horizon blah blah blah
+          // set the ctrls
+          // reset qpos qvel
+          // then the simulation will step
+          let qpos0 = this.simulation.qpos.slice();
+          let qvel0 = this.simulation.qvel.slice();
+          let ctrl = this.simulation.ctrl;
+          let ctrl0 = ctrl.map((x)=>x);
+          let scale = this.params["mppi_sigma"];
+          let rewards = [];
+          // for each of k rollouts
+          for (let k = 0; i<this.params["mppi_k"]; i++) {
+            // for horizons of length h
+            let r = 0;
+            for (let t = 0; i<this.params["mppi_h"]; i++) {
+              // randoly perturb the controls, then step the simulation
+              for (let i = 0; i<ctrl0.length(); i++) {
+                ctrl[i] = ctrl0[i] + scale * standardNormal();
+              }
+              this.simulation.step();
+              // calculate and sum the reward function on state
+              r += getReward(this.simulation);
+            }
+            rewards.push(r);
+            // reset state for the next rollout
+            for (i=0; i<qpos0.length(); i++) {
+              this.simulation.qpos[i] = qpos0[i];
+            }
+            for (i=0; i<qvel0.length(); i++) {
+              this.simulation.qvel[i] = qvel[i];
+            }
+          }
+        }
         this.simulation.step();
 
         this.mujoco_time += timestep * 1000.0;
