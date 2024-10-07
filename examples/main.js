@@ -10,7 +10,8 @@ import   load_mujoco        from '../dist/mujoco_wasm.js';
 const mujoco = await load_mujoco();
 
 // Set up Emscripten's Virtual File System
-var initialScene = "humanoid.xml";
+//var initialScene = "humanoid.xml";
+var initialScene = "acrobot.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 mujoco.FS.writeFile("/working/" + initialScene, await(await fetch("./examples/scenes/" + initialScene)).text());
@@ -25,12 +26,28 @@ export class MuJoCoDemo {
     this.simulation = new mujoco.Simulation(this.model, this.state);
 
     // Define Random State Variables
-    this.params = { scene: initialScene, paused: false, help: false, mppi: false, mppi_k:32, mppi_h: 32, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
+    this.params = { scene: initialScene,
+      paused: false,
+      help: false,
+      mppi: false,
+      mppi_k: 32,
+      mppi_h: 64,
+      mppi_sigma: 0.2,
+      mppi_lambda: 1.0,
+      ctrlnoiserate: 0.0,
+      ctrlnoisestd: 0.0,
+      keyframeNumber: 0 };
     this.mujoco_time = 0.0;
     this.bodies  = {}, this.lights = {};
     this.tmpVec  = new THREE.Vector3();
     this.tmpQuat = new THREE.Quaternion();
     this.updateGUICallbacks = [];
+
+    // MPPI variables
+    this.ctrls = []; //math.zeros(this.simulation.ctrl.length, this.params["mppi_h"]);
+    for (let i=0; i<this.params["mppi_h"]; i++) {
+      this.ctrls.push(this.simulation.ctrl.slice());
+    }
 
     this.container = document.createElement( 'div' );
     document.body.appendChild( this.container );
@@ -131,6 +148,8 @@ export class MuJoCoDemo {
           // TODO: Apply pose perturbations (mocap bodies only).
         }
 
+
+
         if (this.params["mppi"]) {
           // save qpos qvel state
           // run mppi for some horizon blah blah blah
@@ -139,31 +158,89 @@ export class MuJoCoDemo {
           // then the simulation will step
           let qpos0 = this.simulation.qpos.slice();
           let qvel0 = this.simulation.qvel.slice();
-          let ctrl = this.simulation.ctrl;
-          let ctrl0 = ctrl.map((x)=>x);
+          let ctrl = this.simulation.ctrl; // current ctrls
+          let ctrl0 = this.ctrls; // the mean trajectory
+          let ctrl_k = []
           let scale = this.params["mppi_sigma"];
-          let rewards = [];
+          let costs = [];
+          let lambda = this.params["mppi_lambda"];
+          let H = this.params["mppi_h"];
+          let K = this.params["mppi_k"];
+          if (ctrl0.length < H) {
+            //console.log("need to resize");
+            let lastctrl = ctrl0[ctrl0.length-1];
+            for (let i=ctrl0.length; i<H; i++) {
+              ctrl0.push(lastctrl.slice());
+            }
+          } else if (ctrl0.length > H) {
+            while (ctrl0.length > H) { ctrl0.pop(); }
+          }
           // for each of k rollouts
-          for (let k = 0; i<this.params["mppi_k"]; i++) {
+          for (let k = 0; k<K; k++) {
             // for horizons of length h
             let r = 0;
-            for (let t = 0; i<this.params["mppi_h"]; i++) {
+            let ctrl_t = [];
+            let nu = ctrl.length;
+            for (let t = 0; t<H; t++) {
               // randoly perturb the controls, then step the simulation
-              for (let i = 0; i<ctrl0.length(); i++) {
-                ctrl[i] = ctrl0[i] + scale * standardNormal();
+              for (let i = 0; i<nu; i++) {
+                ctrl[i] = Math.max(Math.min(ctrl0[t][i] + scale * standardNormal(), 1), -1);
               }
+              ctrl_t.push(ctrl.slice()); // save a copy of the controls used
               this.simulation.step();
               // calculate and sum the reward function on state
-              r += getReward(this.simulation);
+              //r += getReward(this.simulation);
+              let site = this.simulation.site_xpos;
+              let qvel = this.simulation.qvel;
+              //r += -(site[1]*site[1] + site[2]+site[2]); // point up
+              let s1 = site[1] - 0;
+              let s2 = site[2] - 2; // point up
+              //let s2 = site[2] - 0; // point down
+              r += (s1*s1 + s2*s2);
+              r += (ctrl[0]*ctrl[0]); // penalize controls
+              //r += 0.1 * (qvel[0]*qvel[0] + qvel[1]*qvel[1]); // penalize high speed
             }
-            rewards.push(r);
+            ctrl_k.push(ctrl_t);
+            costs.push(r);
             // reset state for the next rollout
-            for (i=0; i<qpos0.length(); i++) {
+            for (let i=0; i<qpos0.length; i++) {
               this.simulation.qpos[i] = qpos0[i];
             }
-            for (i=0; i<qvel0.length(); i++) {
-              this.simulation.qvel[i] = qvel[i];
+            for (let i=0; i<qvel0.length; i++) {
+              this.simulation.qvel[i] = qvel0[i];
             }
+            this.simulation.forward();
+          }
+          let b = Math.min(...costs);
+          let nu = 1 / costs.reduce((s, v) => s + Math.exp(-(1/lambda) * (v - b)), 0.0);
+          let ws = costs.map((v) => nu * Math.exp(-(1/lambda) * (v - b)));
+          //debugger;
+          // zero out our mean ctrl sequence
+          for (let t=0; t<H; t++) {
+            for (let i = 0; i<nu; i++) {
+              ctrl0[t][i] = 0;
+            }
+          }
+          for (let k=0; k<K; k++) {
+            // for each of K control sequence, weight and average
+            let c_t = ctrl_k[k];
+            let w = ws[k];
+            for (let t=0; t<c_t.length; t++) {
+              for (let i = 0; i<nu; i++) {
+                ctrl0[t][i] += c_t[t][i] * w;
+              }
+            }
+          }
+          for (let i=0; i<nu; i++) { // apply the first controls
+            this.simulation.ctrl[i] = ctrl0[0][i];
+          }
+          for (let t=1; t<H; t++) { // shift the controls
+            for (let i = 0; i<nu; i++) {
+              ctrl0[t-1][i] = ctrl0[t][i];
+            }
+          }
+          for (let i = 0; i<nu; i++) { // duplicate the last control term at the end (or set to 0)
+            ctrl0[H-1][i] = 0; //ctrl0[H-2][i];
           }
         }
         this.simulation.step();

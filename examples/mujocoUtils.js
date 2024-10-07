@@ -27,9 +27,15 @@ export function setupGUI(parentContext) {
   // Add scene selection dropdown.
   let reload = reloadFunc.bind(parentContext);
   parentContext.gui.add(parentContext.params, 'scene', {
-    "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
-    "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml"
+    "Humanoid": "humanoid.xml",
+    "Cassie": "agility_cassie/scene.xml",
+    "Acrobot": "acrobot.xml",
+    "Hammock": "hammock.xml",
+    "Balloons": "balloons.xml",
+    "Hand": "shadow_hand/scene_right.xml",
+    "Flag": "flag.xml",
+    "Mug": "mug.xml",
+    "Tendon": "model_with_tendon.xml"
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -205,6 +211,43 @@ export function setupGUI(parentContext) {
       keyframeGUI.domElement.style.opacity = 0.5;
     }
   });
+
+  console.log(parentContext.params);
+
+  const doMPPI = simulationFolder.add(parentContext.params, 'mppi').name('MPPI Controller');
+  doMPPI.onChange((value) => {
+    if (value) {
+      const mppiText = document.createElement('div');
+      mppiText.style.position = 'absolute';
+      mppiText.style.top = '10px';
+      mppiText.style.left = '10px';
+      mppiText.style.color = 'white';
+      mppiText.style.font = 'normal 18px Arial';
+      mppiText.innerHTML = 'MPPI On';
+      parentContext.container.appendChild(mppiText);
+    } else {
+      parentContext.container.removeChild(parentContext.container.lastChild);
+      let ctrl = parentContext.simulation.ctrl;
+      for (let i=0; i<ctrl.length; i++) {
+        ctrl[i] = 0;
+      }
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyM') {
+      parentContext.params.mppi = !parentContext.params.mppi;
+      doMPPI.setValue(parentContext.params.mppi);
+      event.preventDefault();
+    }
+  });
+  actionInnerHTML += 'Toggle MPPI';
+  keyInnerHTML += 'M<br>';
+
+  // Add sliders for MPPI
+  simulationFolder.add(parentContext.params, 'mppi_k', 0, 128, 1).name('MPPI num rollouts' );
+  simulationFolder.add(parentContext.params, 'mppi_h' , 0, 128, 1).name('MPPI num timesteps');
+  simulationFolder.add(parentContext.params, 'mppi_sigma' , 0.0, 2.0, 0.01).name('MPPI noise scale');
+  simulationFolder.add(parentContext.params, 'mppi_lambda' , 0.001, 1.0, 0.001).name('MPPI lambda');
 
   // Add sliders for ctrlnoiserate and ctrlnoisestd; min = 0, max = 2, step = 0.01.
   simulationFolder.add(parentContext.params, 'ctrlnoiserate', 0.0, 2.0, 0.01).name('Noise rate' );
