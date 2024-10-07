@@ -18,11 +18,12 @@
 
 Load and Run MuJoCo 2.3.1 Models using JavaScript and WebAssembly.
 
-This repo is a fork of @stillonearth 's starter repository, adding tons of functionality and a comprehensive example scene.
+This repo is a fork of a fork of @stillonearth 's starter repository, adding tons of functionality and a comprehensive example scene.
 
-### [See the Live Demo Here](https://zalo.github.io/mujoco_wasm/)
+With an MPPI controller set up for the Acrobot model.
 
-### [See a more Advanced Example Here](https://kzakka.com/robopianist/)
+### [See the Live Demo Here](https://klowrey.github.io/mujoco_wasm/)
+
 
 ## Building
 
