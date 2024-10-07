@@ -127,6 +127,7 @@ export class MuJoCoDemo {
             this.params["Actuator " + i] = currentCtrl[i];
           }
         }
+        // done with control jitter
 
         // Clear old perturbations, apply new ones.
         for (let i = 0; i < this.simulation.qfrc_applied.length; i++) { this.simulation.qfrc_applied[i] = 0.0; }
@@ -147,10 +148,10 @@ export class MuJoCoDemo {
 
           // TODO: Apply pose perturbations (mocap bodies only).
         }
-
-
+        // done with perturbations.
 
         if (this.params["mppi"]) {
+          //console.log(this.simulation.
           // save qpos qvel state
           // run mppi for some horizon blah blah blah
           // set the ctrls
@@ -182,39 +183,37 @@ export class MuJoCoDemo {
             let ctrl_t = [];
             let nu = ctrl.length;
             for (let t = 0; t<H; t++) {
-              // randoly perturb the controls, then step the simulation
+              // randomly perturb the controls, then step the simulation
               for (let i = 0; i<nu; i++) {
+                // clamp the controls; the limits should not be hard coded like this
                 ctrl[i] = Math.max(Math.min(ctrl0[t][i] + scale * standardNormal(), 1), -1);
               }
               ctrl_t.push(ctrl.slice()); // save a copy of the controls used
               this.simulation.step();
               // calculate and sum the reward function on state
+              // reward function
               //r += getReward(this.simulation);
               let site = this.simulation.site_xpos;
-              let qvel = this.simulation.qvel;
               //r += -(site[1]*site[1] + site[2]+site[2]); // point up
               let s1 = site[1] - 0;
               let s2 = site[2] - 2; // point up
               //let s2 = site[2] - 0; // point down
               r += (s1*s1 + s2*s2);
               r += (ctrl[0]*ctrl[0]); // penalize controls
-              //r += 0.1 * (qvel[0]*qvel[0] + qvel[1]*qvel[1]); // penalize high speed
+              // reward function
             }
             ctrl_k.push(ctrl_t);
             costs.push(r);
             // reset state for the next rollout
-            for (let i=0; i<qpos0.length; i++) {
-              this.simulation.qpos[i] = qpos0[i];
-            }
-            for (let i=0; i<qvel0.length; i++) {
-              this.simulation.qvel[i] = qvel0[i];
-            }
+            for (let i=0; i<qpos0.length; i++) { this.simulation.qpos[i] = qpos0[i]; }
+            for (let i=0; i<qvel0.length; i++) { this.simulation.qvel[i] = qvel0[i]; }
             this.simulation.forward();
           }
+          // subtract out the minimum cost, then find the average, and calculate
+          // the weighting
           let b = Math.min(...costs);
           let nu = 1 / costs.reduce((s, v) => s + Math.exp(-(1/lambda) * (v - b)), 0.0);
           let ws = costs.map((v) => nu * Math.exp(-(1/lambda) * (v - b)));
-          //debugger;
           // zero out our mean ctrl sequence
           for (let t=0; t<H; t++) {
             for (let i = 0; i<nu; i++) {
@@ -247,7 +246,6 @@ export class MuJoCoDemo {
 
         this.mujoco_time += timestep * 1000.0;
       }
-
     } else if (this.params["paused"]) {
       this.dragStateManager.update(); // Update the world-space force origin
       let dragged = this.dragStateManager.physicsObject;
