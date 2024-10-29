@@ -1,16 +1,16 @@
 <p align="center">
-  <a href="https://zalo.github.io/mujoco_wasm/"><img src="./examples/MuJoCoWasmLogo.png" href></a>
+  <a href="https://klowrey.github.io/mujoco_wasm/"><img src="./examples/MuJoCoWasmLogo.png" href></a>
 </p>
 <p align="left">
-  <a href="https://github.com/zalo/mujoco_wasm/deployments/activity_log?environment=github-pages">
-      <img src="https://img.shields.io/github/deployments/zalo/mujoco_wasm/github-pages?label=Github%20Pages%20Deployment" title="Github Pages Deployment"></a>
-  <!--<a href="https://github.com/zalo/mujoco_wasm/deployments/activity_log?environment=Production">
-      <img src="https://img.shields.io/github/deployments/zalo/mujoco_wasm/Production?label=Vercel%20Deployment" title="Vercel Deployment"></a> -->
-  <!--<a href="https://lgtm.com/projects/g/zalo/mujoco_wasm/context:javascript">
-      <img alt="Language grade: JavaScript" src="https://img.shields.io/lgtm/grade/javascript/g/zalo/mujoco_wasm.svg?logo=lgtm&logoWidth=18"/></a> -->
-  <a href="https://github.com/zalo/mujoco_wasm/commits/main">
-      <img src="https://img.shields.io/github/last-commit/zalo/mujoco_wasm" title="Last Commit Date"></a>
-  <a href="https://github.com/zalo/mujoco_wasm/blob/main/LICENSE">
+  <a href="https://github.com/klowrey/mujoco_wasm/deployments/activity_log?environment=github-pages">
+      <img src="https://img.shields.io/github/deployments/klowrey/mujoco_wasm/github-pages?label=Github%20Pages%20Deployment" title="Github Pages Deployment"></a>
+  <!--<a href="https://github.com/klowrey/mujoco_wasm/deployments/activity_log?environment=Production">
+      <img src="https://img.shields.io/github/deployments/klowrey/mujoco_wasm/Production?label=Vercel%20Deployment" title="Vercel Deployment"></a> -->
+  <!--<a href="https://lgtm.com/projects/g/klowrey/mujoco_wasm/context:javascript">
+      <img alt="Language grade: JavaScript" src="https://img.shields.io/lgtm/grade/javascript/g/klowrey/mujoco_wasm.svg?logo=lgtm&logoWidth=18"/></a> -->
+  <a href="https://github.com/klowrey/mujoco_wasm/commits/main">
+      <img src="https://img.shields.io/github/last-commit/klowrey/mujoco_wasm" title="Last Commit Date"></a>
+  <a href="https://github.com/klowrey/mujoco_wasm/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-brightgreen" title="License: MIT"></a>
 </p>
 
