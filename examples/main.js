@@ -11,7 +11,8 @@ const mujoco = await load_mujoco();
 
 // Set up Emscripten's Virtual File System
 //var initialScene = "humanoid.xml";
-var initialScene = "acrobot.xml";
+//var initialScene = "acrobot.xml";
+var initialScene = "cartpole.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 mujoco.FS.writeFile("/working/" + initialScene, await(await fetch("./examples/scenes/" + initialScene)).text());
@@ -30,10 +31,10 @@ export class MuJoCoDemo {
       paused: false,
       help: false,
       mppi: false,
-      mppi_k: 32,
-      mppi_h: 64,
+      mppi_k: 8,
+      mppi_h: 80,
       mppi_sigma: 0.2,
-      mppi_lambda: 1.0,
+      mppi_lambda: 0.5,
       ctrlnoiserate: 0.0,
       ctrlnoisestd: 0.0,
       keyframeNumber: 0 };
@@ -42,6 +43,8 @@ export class MuJoCoDemo {
     this.tmpVec  = new THREE.Vector3();
     this.tmpQuat = new THREE.Quaternion();
     this.updateGUICallbacks = [];
+
+    console.log(mujoco.State)
 
     // MPPI variables
     this.ctrls = []; //math.zeros(this.simulation.ctrl.length, this.params["mppi_h"]);
@@ -193,14 +196,20 @@ export class MuJoCoDemo {
               // calculate and sum the reward function on state
               // reward function
               //r += getReward(this.simulation);
+              // acrobot
+              //let site = this.simulation.site_xpos;
+              //let s1 = site[1] - 0;
+              //let s2 = site[2] - 2; // point up
+              ////let s2 = site[2] - 0; // point down
+              //r += (s1*s1 + s2*s2);
+              //r += (ctrl[0]*ctrl[0]); // penalize controls
+              // cartpole
               let site = this.simulation.site_xpos;
-              //r += -(site[1]*site[1] + site[2]+site[2]); // point up
-              let s1 = site[1] - 0;
-              let s2 = site[2] - 2; // point up
-              //let s2 = site[2] - 0; // point down
-              r += (s1*s1 + s2*s2);
+              let s1 = site[3]; // keep in the center
+              let s2 = site[5] - 0.6; // point up
+              r += s1*s1 + s2*s2;
               r += (ctrl[0]*ctrl[0]); // penalize controls
-              // reward function
+              // done reward function
             }
             ctrl_k.push(ctrl_t);
             costs.push(r);
