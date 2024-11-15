@@ -3,7 +3,7 @@ import * as THREE           from 'three';
 import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
-import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
+import { setupGUI, downloadExampleScenesFolder, moveToFS, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal, unitNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../dist/mujoco_wasm.js';
 
 //const average = array => array.reduce((a, b) => a + b) / array.length;
@@ -36,21 +36,21 @@ function vecangle(q1,q2,q3,p1,p2,p3) {
   return Math.acos((q1*p1+q2*p2+q3*p3) / (n1*n2));
 }
 
-function mppi_step(simulation, ctrls, sigma, lambda, H, K) {
+function mppi_step(parent, sigma, lambda, H, K) { //simulation, ctrls, sigma, lambda, H, K) {
   //console.log(this.simulation.
   // save qpos qvel state
   // run mppi for some horizon blah blah blah
   // set the ctrls
   // reset qpos qvel
   // then the simulation will step
-  let qpos0 = simulation.qpos.slice();
-  let qvel0 = simulation.qvel.slice();
-  let ctrl  = simulation.ctrl; // current ctrls
-  let ctrl0 = ctrls; // the mean trajectory
+  let sim = parent.simulation
+  let model = parent.model
+  let qpos0 = sim.qpos.slice();
+  let qvel0 = sim.qvel.slice();
+  let ctrl  = sim.ctrl; // current ctrls
+  let ctrl0 = parent.ctrls; // the mean trajectory
   let ctrl_k = [];
   let costs = [];
-  let H = this.params["mppi_h"];
-  let K = this.params["mppi_k"];
   if (ctrl0.length < H) {
     //console.log("need to resize");
     let lastctrl = ctrl0[ctrl0.length-1];
@@ -60,35 +60,39 @@ function mppi_step(simulation, ctrls, sigma, lambda, H, K) {
   } else if (ctrl0.length > H) {
     while (ctrl0.length > H) { ctrl0.pop(); }
   }
+  console.log("mocap:", sim.mocap_pos);
+  //console.log("range:", model.actuator_ctrlrange);
+  let ctrlrange = model.actuator_ctrlrange;
   // for each of k rollouts
   for (let k = 0; k<K; k++) {
     // for horizons of length h
     let r = 0;
     let ctrl_t = [];
-    let nu = ctrl.length;
     for (let t = 0; t<H; t++) {
       // randomly perturb the controls, then step the simulation
       //let cavg = (ctrl0[t][0]+ctrl0[t][1]+ctrl0[t][2]+ctrl0[t][3])/4;
       //let c = Math.max(Math.min(cavg + sigma * standardNormal(), 13), 0)
-      for (let i = 0; i<nu; i++) {
+      for (let i = 0; i<ctrl.length; i++) {
         let r = standardNormal();
+        //let r = unitNormal();
         // clamp the controls; the limits should not be hard coded like this
-        //ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(), 1), -1);
+        ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(),
+          ctrlrange[i*2+1]), ctrlrange[i*2]);
         //if (i==0) {
         //  ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(), 13), 0); // skydio
         //} else {
         //  ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(), 3), -3); // skydio
         //}
-        if (i==2) {
-          ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma* r, 3), -3); // skydio
-        } else {
-          ctrl[i] = 0;
-        }
+        //if (i==2) {
+        //  ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma* r, 3), -3); // skydio
+        //} else {
+        //  ctrl[i] = 0;
+        //}
         //console.log(t, r);
         //ctrl[i] = Math.max(Math.min(c + (sigma/100)*standardNormal(), 13), 0); // skydio
       }
       ctrl_t.push(ctrl.slice()); // save a copy of the controls used
-      this.simulation.step()
+      sim.step()
       // calculate and sum the reward function on state
       // reward function
       //r += getReward(this.simulation);
@@ -108,39 +112,48 @@ function mppi_step(simulation, ctrls, sigma, lambda, H, K) {
       //r += (ctrl[0]*ctrl[0]); // penalize controls
       // cartpole done
       // skydio
-      let s = this.simulation.site_xpos;
-      let qpos = this.simulation.qpos; //site_xpos;
+      let s = sim.site_xpos;
+      let qpos = sim.qpos; //site_xpos;
+      let qvel = sim.qvel; //site_xpos;
+      let mocap = sim.mocap_pos;
       //let s1 = site[2]; // keep in the center
       //r += 0.1 * (qpos[0]**2 + qpos[1]**2);
-      r += (qpos[2]-1.5)**2;
+      r += 2.5*(qpos[0]-mocap[0])**2;
+      r += 2.5*(qpos[1]-mocap[1])**2;
+      r += 150*(qpos[2]-mocap[2])**2;
+      r += (qvel[0]**2 + qvel[1]**2 + qvel[2]**2);
+      r += (qvel[3]**2 + qvel[4]**2 + qvel[5]**2);
       //let q = 2*getUnitQuatDiff(qpos[3], qpos[4], qpos[5], qpos[6], 1, 0, 0, 0);
       //let q = getUnitQuatDiff(qpos[3], qpos[4], qpos[5], qpos[6], 0, 0, 0, 1);
       //let q = 15*vecangle(s[3]-s[0],s[4]-s[1],s[5]-s[2], 0, 0, 1);
       //r += q**2;
       //r += 1e-2 * ((ctrl[0]-3.5)^2 + (ctrl[1]-3.5)^2 + (ctrl[2]-3.5)^2 + (ctrl[3]-3.5)^2);
       // skydio done
+      // pointmass
+      //let qpos = sim.qpos; //site_xpos;
+      //r += (qpos[0]-qpos[2])**2;
+      //r += (qpos[1]-qpos[3])**2;
+      // pointmass done
     }
     ctrl_k.push(ctrl_t);
     //console.log(r);
     costs.push(r);
     // reset state for the next rollout
-    for (let i=0; i<qpos0.length; i++) { this.simulation.qpos[i] = qpos0[i]; }
-    for (let i=0; i<qvel0.length; i++) { this.simulation.qvel[i] = qvel0[i]; }
-    this.simulation.forward();
+    for (let i=0; i<qpos0.length; i++) { sim.qpos[i] = qpos0[i]; }
+    for (let i=0; i<qvel0.length; i++) { sim.qvel[i] = qvel0[i]; }
+    sim.forward();
   }
   // subtract out the minimum cost, then find the average, and calculate
   // the weighting
-  console.log(costs);
   let cmean = costs.reduce((a, b) => a + b) / costs.length;
   console.log("average cost:", cmean);
   let b = Math.min(...costs);
   console.log("min cost:", b);
   let mu = 1 / costs.reduce((s, v) => s + Math.exp(-(1/lambda) * (v - b)), 0.0);
   let ws = costs.map((v) => mu * Math.exp(-(1/lambda) * (v - b)));
-  console.log("ws:", ws);
   // zero out our mean ctrl sequence
   for (let t=0; t<H; t++) {
-    for (let i = 0; i<nu; i++) {
+    for (let i = 0; i<ctrl.length; i++) {
       ctrl0[t][i] = 0;
     }
   }
@@ -149,55 +162,45 @@ function mppi_step(simulation, ctrls, sigma, lambda, H, K) {
     let c_t = ctrl_k[k];
     let w = ws[k];
     for (let t=0; t<c_t.length; t++) {
-      for (let i = 0; i<nu; i++) {
+      for (let i = 0; i<ctrl.length; i++) {
         ctrl0[t][i] += c_t[t][i] * w;
       }
     }
   }
-  for (let i=0; i<nu; i++) { // apply the first controls
-    this.simulation.ctrl[i] = ctrl0[0][i];
+  for (let i=0; i<ctrl.length; i++) { // apply the first controls
+    sim.ctrl[i] = ctrl0[0][i];
   }
-  console.log(this.simulation.ctrl);
+  console.log(sim.ctrl);
   for (let t=1; t<H; t++) { // shift the controls
-    for (let i = 0; i<nu; i++) {
+    for (let i = 0; i<ctrl.length; i++) {
       ctrl0[t-1][i] = ctrl0[t][i];
     }
   }
-  for (let i = 0; i<nu; i++) { // duplicate the last control term at the end (or set to 0)
+  for (let i = 0; i<ctrl.length; i++) { // duplicate the last control term at the end (or set to 0)
     ctrl0[H-1][i] = ctrl0[H-2][i];
   }
 }
 
-// Set up Emscripten's Virtual File System
-//var initialScene = "humanoid.xml";
-//var initialScene = "acrobot.xml";
-var initialScene = "cartpole.xml";
-//var initialScene = "skydio_x2/scene.xml";
-
-mujoco.FS.mkdir('/working');
-mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
-mujoco.FS.writeFile("/working/" + initialScene,
-  await(await fetch("./examples/scenes/" + initialScene)).text());
-
 export class MuJoCoDemo {
-  constructor() {
+  constructor(scenefile) {
     this.mujoco = mujoco;
 
     // Load in the state from XML
-    this.model      = new mujoco.Model("/working/" + initialScene);
+    this.model      = new mujoco.Model("/working/" + scenefile);
     console.log(this.model);
     this.state      = new mujoco.State(this.model);
     this.simulation = new mujoco.Simulation(this.model, this.state);
 
     // Define Random State Variables
-    this.params = { scene: initialScene,
+    this.params = {
+      scene: scenefile,
       paused: false,
       help: false,
       mppi: false,
-      mppi_k: 8,
-      mppi_h: 16,
-      mppi_sigma: 0.2,
-      mppi_lambda: 0.5,
+      mppi_k: 12,
+      mppi_h: 64,
+      mppi_sigma: 1.0,
+      mppi_lambda: 0.2,
       ctrlnoiserate: 0.0,
       ctrlnoisestd: 0.0,
       keyframeNumber: 0 };
@@ -259,11 +262,11 @@ export class MuJoCoDemo {
 
   async init() {
     // Download the the examples to MuJoCo's virtual file system
-    await downloadExampleScenesFolder(mujoco);
+    //await downloadExampleScenesFolder(mujoco);
 
     // Initialize the three.js Scene using the .xml Model in initialScene
     [this.model, this.state, this.simulation, this.bodies, this.lights] =  
-      await loadSceneFromURL(mujoco, initialScene, this);
+      await loadSceneFromURL(mujoco, this.params["scene"], this);
 
     let ctrl = this.simulation.ctrl;
     for (let i = 0; i < ctrl.length; i++) {
@@ -321,7 +324,11 @@ export class MuJoCoDemo {
         // done with perturbations.
 
         if (this.params["mppi"]) {
-          
+          mppi_step(this, //.simulation, this.ctrls,
+            this.params["mppi_sigma"],
+            this.params["mppi_lambda"],
+            this.params["mppi_h"],
+            this.params["mppi_k"]);
         }
         this.simulation.step();
 
@@ -444,5 +451,27 @@ export class MuJoCoDemo {
   }
 }
 
-let demo = new MuJoCoDemo();
+// Set up Emscripten's Virtual File System
+//var initialScene = "humanoid.xml";
+//var initialScene = "acrobot.xml";
+//var initialScene = "cartpole.xml";
+var initialScene = "skydio_x2/scene.xml";
+//var initialScene = "pointmass.xml";
+//let scenefiles = ["skydio_x2/assets/X2_lowpoly_texture_SpinningProps_1024.png",
+//  "skydio_x2/assets/X2_lowpoly.obj",
+//  "skydio_x2/x2.xml",
+//  "skydio_x2/scene.xml"]
+//var initialScene = "agility_cassie/scene.xml";
+
+mujoco.FS.mkdir('/working');
+mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
+//moveToFS(scenefiles);
+//mujoco.FS.writeFile("/working/" + initialScene,
+//  await(
+//    await fetch("./examples/scenes/" + initialScene)
+//  ).text());
+
+await downloadExampleScenesFolder(mujoco);
+
+let demo = new MuJoCoDemo(initialScene);
 await demo.init();

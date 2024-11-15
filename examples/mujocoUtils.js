@@ -37,6 +37,7 @@ export function setupGUI(parentContext) {
     'scene',
     {
       "Humanoid": "humanoid.xml",
+      "Point Mass": "pointmass.xml",
       "Acrobot": "acrobot.xml",
       "Cartpole": "cartpole.xml",
       "Cassie": "agility_cassie/scene.xml",
@@ -580,23 +581,24 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
   
     parent.mujocoRoot = mujocoRoot;
 
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log("loadddddddddding");
-  console.log(simulation.ctrl);
-  //for (let i=0; i < simulation.ctrl.length(); i++) {
-  //  state.ctrl[i] = 0;
-  //}
   return [model, state, simulation, bodies, lights]
+}
+
+export async function moveToFS(mujoco, file, resp) {
+  console.log(file);
+  let split = file.split("/");
+  let working = "/working/";
+  for (let f = 0; f < split.length - 1; f++) {
+    working += split[f];
+    if (!mujoco.FS.analyzePath(working).exists) { mujoco.FS.mkdir(working); }
+    working += "/";
+  }
+
+  if (file.endsWith(".png") || file.endsWith(".stl") || file.endsWith(".skn")) {
+    mujoco.FS.writeFile("/working/" + file, new Uint8Array(await resp.arrayBuffer()));
+  } else {
+    mujoco.FS.writeFile("/working/" + file, await resp.text());
+  }
 }
 
 /** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
@@ -605,6 +607,7 @@ export async function downloadExampleScenesFolder(mujoco) {
   let allFiles = [
     "22_humanoids.xml",
     "acrobot.xml",
+    "cartpole.xml",
     "adhesion.xml",
     "agility_cassie/assets/achilles-rod.obj",
     "agility_cassie/assets/cassie-texture.png",
@@ -631,6 +634,7 @@ export async function downloadExampleScenesFolder(mujoco) {
     "flag.xml",
     "hammock.xml",
     "humanoid.xml",
+    "pointmass.xml",
     "humanoid_body.xml",
     "mug.obj",
     "mug.png",
@@ -662,19 +666,21 @@ export async function downloadExampleScenesFolder(mujoco) {
   let requests = allFiles.map((url) => fetch("./examples/scenes/" + url));
   let responses = await Promise.all(requests);
   for (let i = 0; i < responses.length; i++) {
-      let split = allFiles[i].split("/");
-      let working = '/working/';
-      for (let f = 0; f < split.length - 1; f++) {
-          working += split[f];
-          if (!mujoco.FS.analyzePath(working).exists) { mujoco.FS.mkdir(working); }
-          working += "/";
-      }
+      //let split = allFiles[i].split("/");
+      //let working = "/working/";
+      //for (let f = 0; f < split.length - 1; f++) {
+      //    working += split[f];
+      //    if (!mujoco.FS.analyzePath(working).exists) { mujoco.FS.mkdir(working); }
+      //    working += "/";
+      //}
 
-      if (allFiles[i].endsWith(".png") || allFiles[i].endsWith(".stl") || allFiles[i].endsWith(".skn")) {
-          mujoco.FS.writeFile("/working/" + allFiles[i], new Uint8Array(await responses[i].arrayBuffer()));
-      } else {
-          mujoco.FS.writeFile("/working/" + allFiles[i], await responses[i].text());
-      }
+      //if (allFiles[i].endsWith(".png") || allFiles[i].endsWith(".stl") || allFiles[i].endsWith(".skn")) {
+      //    mujoco.FS.writeFile("/working/" + allFiles[i], new Uint8Array(await responses[i].arrayBuffer()));
+      //} else {
+      //    mujoco.FS.writeFile("/working/" + allFiles[i], await responses[i].text());
+      //}
+    await moveToFS(mujoco, allFiles[i], responses[i]);
+    console.log("wrote", "/working/" + allFiles[i]);
   }
 }
 
@@ -724,4 +730,15 @@ export function toMujocoPos(target) { return target.set(target.x, -target.z, tar
 export function standardNormal() {
   return Math.sqrt(-2.0 * Math.log( Math.random())) *
          Math.cos ( 2.0 * Math.PI * Math.random()); }
+
+export function unitNormal() {
+  var u = 2*Math.random()-1;
+  var v = 2*Math.random()-1;
+  var r = u*u + v*v;
+  /*if outside interval [0,1] start over*/
+  if(r == 0 || r >= 1) return unitNormal();
+
+  var c = Math.sqrt(-2*Math.log(r)/r);
+  return u*c;
+}
 

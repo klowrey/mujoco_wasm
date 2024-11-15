@@ -1,7 +1,7 @@
 <mujoco model="Skydio X2">
   <compiler autolimits="true" assetdir="assets" />
 
-  <option timestep="0.01" density="1.225" viscosity="1.8e-5" gravity="0 0 -0"/>
+  <option timestep="0.01" density="1.225" viscosity="1.8e-5" gravity="0 0 -9.81"/>
 
   <default>
     <default class="x2">
@@ -31,12 +31,19 @@
 
   <worldbody>
     <light name="spotlight" mode="targetbodycom" target="x2" pos="0 -1 2"/>
+    <body name='target' pos='0 0 1.5' mocap='true'>
+      <geom name='mocap_cube' conaffinity="0" contype="0" type='box' size='0.1 0.1 0.1' rgba='1 0 0 0.5'/>
+    </body>
+    <!--
+    <body name='target' pos='0 0 1.5' mocap='false'>
+    </body>
+    -->
     <body name="x2" pos="0 0 0.1" childclass="x2">
-      <!--<freejoint/>-->
-      <joint type="slide" axis="1 0 0" damping="0.0" armature="0.0" frictionloss="0.0" name="rootx"/>
-      <joint type="slide" axis="0 1 0" damping="0.0" armature="0.0" frictionloss="0.0" name="rooty"/>
-      <joint type="slide" axis="0 0 1" damping="0.0" armature="0.0" frictionloss="0.0" name="rootz"/>
+      <freejoint/>
       <!--
+      <joint type="slide" axis="1 0 0" damping="0.0" armature="0.0" frictionloss="0.0" name="rootx" limited="false"/>
+      <joint type="slide" axis="0 1 0" damping="0.0" armature="0.0" frictionloss="0.0" name="rooty" limited="false"/>
+      <joint type="slide" axis="0 0 1" damping="0.0" armature="0.0" frictionloss="0.0" name="rootz" limited="false"/>
       <joint type="ball"/>
       <joint type="hinge" axis="1 0 0" damping="0.0" armature="0.0" frictionloss="0.0"/>
       <joint type="hinge" axis="0 1 0" damping="0.0" armature="0.0" frictionloss="0.0"/>
@@ -44,7 +51,6 @@
       -->
       <camera name="track" pos="-1 0 .5" xyaxes="0 -1 0 1 0 2" mode="trackcom"/>
       <site name="imu" pos="0 0 .02"/>
-      <site name="imu2" pos="0 0 .04"/>
       <geom material="phong3SG" mesh="X2_lowpoly" class="visual" quat="0 0 1 1"/>
       <geom class="collision" size=".06 .027 .02" pos=".04 0 .02"/>
       <geom class="collision" size=".06 .027 .02" pos=".04 0 .06"/>
@@ -63,17 +69,17 @@
   </worldbody>
 
   <actuator>
-    <!--
     <motor class="x2" name="thrust1" site="thrust1" gear="0 0 1 0 0 -.0201"/>
     <motor class="x2" name="thrust2" site="thrust2" gear="0 0 1 0 0  .0201"/>
     <motor class="x2" name="thrust3" site="thrust3" gear="0 0 1 0 0  .0201"/>
     <motor class="x2" name="thrust4" site="thrust4" gear="0 0 1 0 0 -.0201"/>
-    -->
-    <motor class="x2" name="thrust1" joint="rootx" gear="0" ctrlrange="-3 3"/>
-    <motor class="x2" name="thrust2" joint="rooty" gear="0" ctrlrange="-3 3"/>
-    <!--<motor class="x2" name="thrust3" joint="rootz" gear="1" ctrlrange="-3 3"/>-->
-    <position name="thrust3" joint="rootz" kp="10" ctrlrange="-3 3"/>
+    <!--
+    <motor class="x2" name="thrust1" joint="rootx" gear="1" ctrlrange="-3 3"/>
+    <motor class="x2" name="thrust2" joint="rooty" gear="1" ctrlrange="-3 3"/>
+    <motor class="x2" name="thrust3" joint="rootz" gear="1" ctrlrange="-3 3"/>
     <motor class="x2" name="thrust4" site="imu" gear="0 0 0 0 0 0" ctrlrange="-3 3"/>
+    -->
+    <!--<position name="thrust3" joint="rootz" kp="10" ctrlrange="-3 3"/>-->
   </actuator>
 
   <sensor>
