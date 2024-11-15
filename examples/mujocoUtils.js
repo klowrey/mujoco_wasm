@@ -7,6 +7,13 @@ export async function reloadFunc() {
   this.scene.remove(this.scene.getObjectByName("MuJoCo Root"));
   [this.model, this.state, this.simulation, this.bodies, this.lights] =
     await loadSceneFromURL(this.mujoco, this.params.scene, this);
+  //console.log(this.params.scene);
+  //console.log(this.simulation.ctrl);
+  this.ctrls = [];
+  for (let i=0; i<this.params["mppi_h"]; i++) {
+    this.ctrls.push(this.simulation.ctrl.slice());
+    //console.log(i, this.simulation.ctrl.slice());
+  }
   this.simulation.forward();
   for (let i = 0; i < this.updateGUICallbacks.length; i++) {
     this.updateGUICallbacks[i](this.model, this.simulation, this.params);
@@ -26,17 +33,21 @@ export function setupGUI(parentContext) {
 
   // Add scene selection dropdown.
   let reload = reloadFunc.bind(parentContext);
-  parentContext.gui.add(parentContext.params, 'scene', {
-    "Humanoid": "humanoid.xml",
-    "Cassie": "agility_cassie/scene.xml",
-    "Acrobot": "acrobot.xml",
-    "Hammock": "hammock.xml",
-    "Balloons": "balloons.xml",
-    "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml",
-    "Mug": "mug.xml",
-    "Tendon": "model_with_tendon.xml"
-  }).name('Example Scene').onChange(reload);
+  parentContext.gui.add(parentContext.params,
+    'scene',
+    {
+      "Humanoid": "humanoid.xml",
+      "Acrobot": "acrobot.xml",
+      "Cartpole": "cartpole.xml",
+      "Cassie": "agility_cassie/scene.xml",
+      "Skydio X2": "skydio_x2/scene.xml",
+      "Hammock": "hammock.xml",
+      "Balloons": "balloons.xml",
+      "Hand": "shadow_hand/scene_right.xml",
+      "Flag": "flag.xml",
+      "Mug": "mug.xml",
+      "Tendon": "model_with_tendon.xml"
+    }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
   // Parameters:
@@ -212,7 +223,7 @@ export function setupGUI(parentContext) {
     }
   });
 
-  console.log(parentContext.params);
+  //console.log(parentContext.params);
 
   const doMPPI = simulationFolder.add(parentContext.params, 'mppi').name('MPPI Controller');
   doMPPI.onChange((value) => {
@@ -245,8 +256,8 @@ export function setupGUI(parentContext) {
 
   // Add sliders for MPPI
   simulationFolder.add(parentContext.params, 'mppi_k', 0, 128, 1).name('MPPI num rollouts' );
-  simulationFolder.add(parentContext.params, 'mppi_h' , 0, 128, 1).name('MPPI num timesteps');
-  simulationFolder.add(parentContext.params, 'mppi_sigma' , 0.0, 2.0, 0.01).name('MPPI noise scale');
+  simulationFolder.add(parentContext.params, 'mppi_h' , 0, 1024, 1).name('MPPI num timesteps');
+  simulationFolder.add(parentContext.params, 'mppi_sigma' , 0.0, 10.0, 0.1).name('MPPI noise scale');
   simulationFolder.add(parentContext.params, 'mppi_lambda' , 0.001, 1.0, 0.001).name('MPPI lambda');
 
   // Add sliders for ctrlnoiserate and ctrlnoisestd; min = 0, max = 2, step = 0.01.
@@ -569,7 +580,23 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
   
     parent.mujocoRoot = mujocoRoot;
 
-    return [model, state, simulation, bodies, lights]
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log("loadddddddddding");
+  console.log(simulation.ctrl);
+  //for (let i=0; i < simulation.ctrl.length(); i++) {
+  //  state.ctrl[i] = 0;
+  //}
+  return [model, state, simulation, bodies, lights]
 }
 
 /** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
@@ -577,6 +604,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 export async function downloadExampleScenesFolder(mujoco) {
   let allFiles = [
     "22_humanoids.xml",
+    "acrobot.xml",
     "adhesion.xml",
     "agility_cassie/assets/achilles-rod.obj",
     "agility_cassie/assets/cassie-texture.png",
@@ -594,6 +622,10 @@ export async function downloadExampleScenesFolder(mujoco) {
     "agility_cassie/assets/tarsus.obj",
     "agility_cassie/cassie.xml",
     "agility_cassie/scene.xml",
+    "skydio_x2/assets/X2_lowpoly_texture_SpinningProps_1024.png",
+    "skydio_x2/assets/X2_lowpoly.obj",
+    "skydio_x2/x2.xml",
+    "skydio_x2/scene.xml",
     "arm26.xml",
     "balloons.xml",
     "flag.xml",

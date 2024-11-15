@@ -6,16 +6,178 @@ import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../dist/mujoco_wasm.js';
 
+//const average = array => array.reduce((a, b) => a + b) / array.length;
+
 // Load the MuJoCo Module
 const mujoco = await load_mujoco();
+
+/**
+ * Calculates the minimum difference between two unit quaternions.
+ * Takes into account that q and -q represent the same rotation.
+ * Assumes input quaternions are already normalized (unit quaternions).
+ * @param {Array<number>} q1 - First unit quaternion [w, x, y, z]
+ * @param {Array<number>} q2 - Second unit quaternion [w, x, y, z]
+ * @returns {number} - Minimum difference between the quaternions
+ */
+function getUnitQuatDiff(q1, q2, q3, q4, p1, p2, p3, p4) {
+    // Calculate dot product
+    const dotProduct = q1 * p1 + q2 * p2 + q3 * p3 + q4 * p4;
+    // Get the absolute value since q and -q represent the same rotation
+    const absDotProduct = Math.abs(dotProduct);
+    // Clamp to handle floating point errors
+    const clampedDot = Math.min(1, Math.max(-1, absDotProduct));
+    // Return the minimum angle between the quaternions
+    return Math.acos(clampedDot) * 2;
+}
+
+function vecangle(q1,q2,q3,p1,p2,p3) {
+  let n1 = Math.sqrt(q1**2 +q2**2 +q3**2)
+  let n2 = Math.sqrt(p1**2 +p2**2 +p3**2)
+  return Math.acos((q1*p1+q2*p2+q3*p3) / (n1*n2));
+}
+
+function mppi_step(simulation, ctrls, sigma, lambda, H, K) {
+  //console.log(this.simulation.
+  // save qpos qvel state
+  // run mppi for some horizon blah blah blah
+  // set the ctrls
+  // reset qpos qvel
+  // then the simulation will step
+  let qpos0 = simulation.qpos.slice();
+  let qvel0 = simulation.qvel.slice();
+  let ctrl  = simulation.ctrl; // current ctrls
+  let ctrl0 = ctrls; // the mean trajectory
+  let ctrl_k = [];
+  let costs = [];
+  let H = this.params["mppi_h"];
+  let K = this.params["mppi_k"];
+  if (ctrl0.length < H) {
+    //console.log("need to resize");
+    let lastctrl = ctrl0[ctrl0.length-1];
+    for (let i=ctrl0.length; i<H; i++) {
+      ctrl0.push(lastctrl.slice());
+    }
+  } else if (ctrl0.length > H) {
+    while (ctrl0.length > H) { ctrl0.pop(); }
+  }
+  // for each of k rollouts
+  for (let k = 0; k<K; k++) {
+    // for horizons of length h
+    let r = 0;
+    let ctrl_t = [];
+    let nu = ctrl.length;
+    for (let t = 0; t<H; t++) {
+      // randomly perturb the controls, then step the simulation
+      //let cavg = (ctrl0[t][0]+ctrl0[t][1]+ctrl0[t][2]+ctrl0[t][3])/4;
+      //let c = Math.max(Math.min(cavg + sigma * standardNormal(), 13), 0)
+      for (let i = 0; i<nu; i++) {
+        let r = standardNormal();
+        // clamp the controls; the limits should not be hard coded like this
+        //ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(), 1), -1);
+        //if (i==0) {
+        //  ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(), 13), 0); // skydio
+        //} else {
+        //  ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma * standardNormal(), 3), -3); // skydio
+        //}
+        if (i==2) {
+          ctrl[i] = Math.max(Math.min(ctrl0[t][i] + sigma* r, 3), -3); // skydio
+        } else {
+          ctrl[i] = 0;
+        }
+        //console.log(t, r);
+        //ctrl[i] = Math.max(Math.min(c + (sigma/100)*standardNormal(), 13), 0); // skydio
+      }
+      ctrl_t.push(ctrl.slice()); // save a copy of the controls used
+      this.simulation.step()
+      // calculate and sum the reward function on state
+      // reward function
+      //r += getReward(this.simulation);
+      // acrobot
+      //let site = this.simulation.site_xpos;
+      //let s1 = site[1] - 0;
+      //let s2 = site[2] - 2; // point up
+      ////let s2 = site[2] - 0; // point down
+      //r += (s1*s1 + s2*s2);
+      //r += (ctrl[0]*ctrl[0]); // penalize controls
+      // acrobot done
+      // cartpole
+      //let site = this.simulation.site_xpos;
+      //let s1 = site[3]; // keep in the center
+      //let s2 = site[5] - 0.6; // point up
+      //r += s1*s1 + s2*s2;
+      //r += (ctrl[0]*ctrl[0]); // penalize controls
+      // cartpole done
+      // skydio
+      let s = this.simulation.site_xpos;
+      let qpos = this.simulation.qpos; //site_xpos;
+      //let s1 = site[2]; // keep in the center
+      //r += 0.1 * (qpos[0]**2 + qpos[1]**2);
+      r += (qpos[2]-1.5)**2;
+      //let q = 2*getUnitQuatDiff(qpos[3], qpos[4], qpos[5], qpos[6], 1, 0, 0, 0);
+      //let q = getUnitQuatDiff(qpos[3], qpos[4], qpos[5], qpos[6], 0, 0, 0, 1);
+      //let q = 15*vecangle(s[3]-s[0],s[4]-s[1],s[5]-s[2], 0, 0, 1);
+      //r += q**2;
+      //r += 1e-2 * ((ctrl[0]-3.5)^2 + (ctrl[1]-3.5)^2 + (ctrl[2]-3.5)^2 + (ctrl[3]-3.5)^2);
+      // skydio done
+    }
+    ctrl_k.push(ctrl_t);
+    //console.log(r);
+    costs.push(r);
+    // reset state for the next rollout
+    for (let i=0; i<qpos0.length; i++) { this.simulation.qpos[i] = qpos0[i]; }
+    for (let i=0; i<qvel0.length; i++) { this.simulation.qvel[i] = qvel0[i]; }
+    this.simulation.forward();
+  }
+  // subtract out the minimum cost, then find the average, and calculate
+  // the weighting
+  console.log(costs);
+  let cmean = costs.reduce((a, b) => a + b) / costs.length;
+  console.log("average cost:", cmean);
+  let b = Math.min(...costs);
+  console.log("min cost:", b);
+  let mu = 1 / costs.reduce((s, v) => s + Math.exp(-(1/lambda) * (v - b)), 0.0);
+  let ws = costs.map((v) => mu * Math.exp(-(1/lambda) * (v - b)));
+  console.log("ws:", ws);
+  // zero out our mean ctrl sequence
+  for (let t=0; t<H; t++) {
+    for (let i = 0; i<nu; i++) {
+      ctrl0[t][i] = 0;
+    }
+  }
+  for (let k=0; k<K; k++) {
+    // for each of K control sequence, weight and average
+    let c_t = ctrl_k[k];
+    let w = ws[k];
+    for (let t=0; t<c_t.length; t++) {
+      for (let i = 0; i<nu; i++) {
+        ctrl0[t][i] += c_t[t][i] * w;
+      }
+    }
+  }
+  for (let i=0; i<nu; i++) { // apply the first controls
+    this.simulation.ctrl[i] = ctrl0[0][i];
+  }
+  console.log(this.simulation.ctrl);
+  for (let t=1; t<H; t++) { // shift the controls
+    for (let i = 0; i<nu; i++) {
+      ctrl0[t-1][i] = ctrl0[t][i];
+    }
+  }
+  for (let i = 0; i<nu; i++) { // duplicate the last control term at the end (or set to 0)
+    ctrl0[H-1][i] = ctrl0[H-2][i];
+  }
+}
 
 // Set up Emscripten's Virtual File System
 //var initialScene = "humanoid.xml";
 //var initialScene = "acrobot.xml";
 var initialScene = "cartpole.xml";
+//var initialScene = "skydio_x2/scene.xml";
+
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
-mujoco.FS.writeFile("/working/" + initialScene, await(await fetch("./examples/scenes/" + initialScene)).text());
+mujoco.FS.writeFile("/working/" + initialScene,
+  await(await fetch("./examples/scenes/" + initialScene)).text());
 
 export class MuJoCoDemo {
   constructor() {
@@ -23,6 +185,7 @@ export class MuJoCoDemo {
 
     // Load in the state from XML
     this.model      = new mujoco.Model("/working/" + initialScene);
+    console.log(this.model);
     this.state      = new mujoco.State(this.model);
     this.simulation = new mujoco.Simulation(this.model, this.state);
 
@@ -32,7 +195,7 @@ export class MuJoCoDemo {
       help: false,
       mppi: false,
       mppi_k: 8,
-      mppi_h: 80,
+      mppi_h: 16,
       mppi_sigma: 0.2,
       mppi_lambda: 0.5,
       ctrlnoiserate: 0.0,
@@ -47,7 +210,7 @@ export class MuJoCoDemo {
     console.log(mujoco.State)
 
     // MPPI variables
-    this.ctrls = []; //math.zeros(this.simulation.ctrl.length, this.params["mppi_h"]);
+    this.ctrls = [];
     for (let i=0; i<this.params["mppi_h"]; i++) {
       this.ctrls.push(this.simulation.ctrl.slice());
     }
@@ -102,6 +265,10 @@ export class MuJoCoDemo {
     [this.model, this.state, this.simulation, this.bodies, this.lights] =  
       await loadSceneFromURL(mujoco, initialScene, this);
 
+    let ctrl = this.simulation.ctrl;
+    for (let i = 0; i < ctrl.length; i++) {
+      ctrl[i] = 0;
+    }
     this.gui = new GUI();
     setupGUI(this);
   }
@@ -154,102 +321,7 @@ export class MuJoCoDemo {
         // done with perturbations.
 
         if (this.params["mppi"]) {
-          //console.log(this.simulation.
-          // save qpos qvel state
-          // run mppi for some horizon blah blah blah
-          // set the ctrls
-          // reset qpos qvel
-          // then the simulation will step
-          let qpos0 = this.simulation.qpos.slice();
-          let qvel0 = this.simulation.qvel.slice();
-          let ctrl = this.simulation.ctrl; // current ctrls
-          let ctrl0 = this.ctrls; // the mean trajectory
-          let ctrl_k = []
-          let scale = this.params["mppi_sigma"];
-          let costs = [];
-          let lambda = this.params["mppi_lambda"];
-          let H = this.params["mppi_h"];
-          let K = this.params["mppi_k"];
-          if (ctrl0.length < H) {
-            //console.log("need to resize");
-            let lastctrl = ctrl0[ctrl0.length-1];
-            for (let i=ctrl0.length; i<H; i++) {
-              ctrl0.push(lastctrl.slice());
-            }
-          } else if (ctrl0.length > H) {
-            while (ctrl0.length > H) { ctrl0.pop(); }
-          }
-          // for each of k rollouts
-          for (let k = 0; k<K; k++) {
-            // for horizons of length h
-            let r = 0;
-            let ctrl_t = [];
-            let nu = ctrl.length;
-            for (let t = 0; t<H; t++) {
-              // randomly perturb the controls, then step the simulation
-              for (let i = 0; i<nu; i++) {
-                // clamp the controls; the limits should not be hard coded like this
-                ctrl[i] = Math.max(Math.min(ctrl0[t][i] + scale * standardNormal(), 1), -1);
-              }
-              ctrl_t.push(ctrl.slice()); // save a copy of the controls used
-              this.simulation.step();
-              // calculate and sum the reward function on state
-              // reward function
-              //r += getReward(this.simulation);
-              // acrobot
-              //let site = this.simulation.site_xpos;
-              //let s1 = site[1] - 0;
-              //let s2 = site[2] - 2; // point up
-              ////let s2 = site[2] - 0; // point down
-              //r += (s1*s1 + s2*s2);
-              //r += (ctrl[0]*ctrl[0]); // penalize controls
-              // cartpole
-              let site = this.simulation.site_xpos;
-              let s1 = site[3]; // keep in the center
-              let s2 = site[5] - 0.6; // point up
-              r += s1*s1 + s2*s2;
-              r += (ctrl[0]*ctrl[0]); // penalize controls
-              // done reward function
-            }
-            ctrl_k.push(ctrl_t);
-            costs.push(r);
-            // reset state for the next rollout
-            for (let i=0; i<qpos0.length; i++) { this.simulation.qpos[i] = qpos0[i]; }
-            for (let i=0; i<qvel0.length; i++) { this.simulation.qvel[i] = qvel0[i]; }
-            this.simulation.forward();
-          }
-          // subtract out the minimum cost, then find the average, and calculate
-          // the weighting
-          let b = Math.min(...costs);
-          let nu = 1 / costs.reduce((s, v) => s + Math.exp(-(1/lambda) * (v - b)), 0.0);
-          let ws = costs.map((v) => nu * Math.exp(-(1/lambda) * (v - b)));
-          // zero out our mean ctrl sequence
-          for (let t=0; t<H; t++) {
-            for (let i = 0; i<nu; i++) {
-              ctrl0[t][i] = 0;
-            }
-          }
-          for (let k=0; k<K; k++) {
-            // for each of K control sequence, weight and average
-            let c_t = ctrl_k[k];
-            let w = ws[k];
-            for (let t=0; t<c_t.length; t++) {
-              for (let i = 0; i<nu; i++) {
-                ctrl0[t][i] += c_t[t][i] * w;
-              }
-            }
-          }
-          for (let i=0; i<nu; i++) { // apply the first controls
-            this.simulation.ctrl[i] = ctrl0[0][i];
-          }
-          for (let t=1; t<H; t++) { // shift the controls
-            for (let i = 0; i<nu; i++) {
-              ctrl0[t-1][i] = ctrl0[t][i];
-            }
-          }
-          for (let i = 0; i<nu; i++) { // duplicate the last control term at the end (or set to 0)
-            ctrl0[H-1][i] = 0; //ctrl0[H-2][i];
-          }
+          
         }
         this.simulation.step();
 
@@ -311,8 +383,6 @@ export class MuJoCoDemo {
           //pos[addr + 4] = yq + (pos[addr + 4] - yq) * 0.1;
           //pos[addr + 5] = zq + (pos[addr + 5] - zq) * 0.1;
           //pos[addr + 6] = wq + (pos[addr + 6] - wq) * 0.1;
-
-
         }
       }
 
